@@ -591,9 +591,10 @@ export function Player(props: {
     // The controls are drawn once the video element exists.
     onMount(() => setReady(true))
 
-    // The lock screen and media keys: its name, the jumps, previous and next.
+    // The lock screen and media keys: its name, the jumps, previous and next. Not on an iPhone or
+    // iPad, where this is what puts the video in the Dynamic Island the moment it starts.
     createEffect(() => {
-        if (!('mediaSession' in navigator)) return
+        if (!('mediaSession' in navigator) || appleTouch) return
         const info = props.info
         const ep = info?.episode
         navigator.mediaSession.metadata = new MediaMetadata({ title: ep ? `${ep.code}${ep.name ? ` ${ep.name}` : ''}` : (info?.title ?? item.title), artist: ep?.show ?? item.chat })
