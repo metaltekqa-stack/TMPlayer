@@ -117,6 +117,66 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
+      # This fork's own copy on Netlify (tmplayer-pwa.netlify.app). Netlify reads neither
+      # Cloudflare's "! Header" lines nor _routes.json, and does not fall back to the page by
+      # itself, so a copy of the site gets Netlify's own _headers and _redirects. The /tmdb poster
+      # proxy is a Cloudflare Function, so here it answers 404 and the page goes without posters.
+      # The copy is kept as the artifact netlify-site: download it from the run and drag the zip
+      # onto the project's Deploys page. With the secret NETLIFY_AUTH_TOKEN set, it is also
+      # deployed straight away.
+      - name: Prepare for Netlify
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        run: |
+          cp -r webapp/dist webapp/netlify
+          rm -f webapp/netlify/_routes.json
+          cat > webapp/netlify/_headers <<'EOF'
+          /*
+            X-Content-Type-Options: nosniff
+            Referrer-Policy: no-referrer
+            Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
+          /assets/*
+            Cache-Control: public, max-age=31536000, immutable
+          /tv/assets/*
+            Cache-Control: public, max-age=31536000, immutable
+          /libav/*
+            Cache-Control: public, max-age=31536000, immutable
+          /sw.js
+            Cache-Control: no-cache
+            Service-Worker-Allowed: /
+          /manifest.webmanifest
+            Content-Type: application/manifest+json
+          /licenses.txt
+            Content-Type: text/plain; charset=utf-8
+          EOF
+          cat > webapp/netlify/_redirects <<'EOF'
+          /tmdb/*  /404.html  404
+          /*  /index.html  200
+          EOF
+
+      - name: Upload the Netlify copy
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v7
+        with:
+          name: netlify-site
+          path: webapp/netlify
+          include-hidden-files: true
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Netlify token
+        id: netlify
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+        run: echo "set=$([ -n "$NETLIFY_AUTH_TOKEN" ] && echo yes || echo no)" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy to Netlify
+        if: steps.netlify.outputs.set == 'yes'
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: a869a4b0-1322-46b5-aff8-61472d2366c2
+        run: npx --yes netlify-cli@27.12.1 deploy --prod --no-build --dir webapp/netlify --site "$NETLIFY_SITE_ID" --message "Web player ${GITHUB_SHA::7}"
+
   e2e:
     name: End to end (${{ matrix.project }})
     needs: build
