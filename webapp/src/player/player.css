@@ -595,3 +595,22 @@
 .player[data-variant="tv"] .pc-loader-words { padding: 0 48px 27px; }
 .player[data-variant="tv"] .pc-loader-back { display: none; }
 @media (prefers-reduced-motion: reduce) { .pc-loader-art { animation: pc-loader-fade 600ms ease-out; } }
+
+/*
+ * An iPhone turned by the player itself (sideways.ts): a quarter turn clockwise, for a phone held
+ * with its top to the left, while the window stays upright. The player's left and right edges are
+ * then the phone's top and bottom, so the controls keep clear of the camera and the home bar there,
+ * and its top and bottom edges need no room of their own.
+ */
+.player.sideways, .watch > .player-root > .player.sideways {
+  position: fixed; top: 0; left: 0; z-index: 10;
+  width: 100vh; width: 100dvh; height: 100vw;
+  transform-origin: 0 0; transform: translateX(100vw) rotate(90deg);
+}
+.player.sideways .pc-top { padding: 0 max(4px, env(safe-area-inset-bottom)) 0 max(4px, env(safe-area-inset-top)); }
+.player.sideways .pc-bottom { padding: 0 max(24px, env(safe-area-inset-bottom)) 12px max(24px, env(safe-area-inset-top)); }
+.player.sideways .pc-corner.back, .player.sideways .pc-chipline.loop { left: max(24px, env(safe-area-inset-top)); }
+.player.sideways .pc-corner.skip, .player.sideways .pc-chipline.loading { right: max(24px, env(safe-area-inset-bottom)); }
+.player.sideways .pc-details { left: max(16px, env(safe-area-inset-top)); }
+.player.sideways .pc-loader-back { top: 12px; left: max(12px, env(safe-area-inset-top)); }
+.player.sideways .pc-status { padding: 24px max(16px, env(safe-area-inset-bottom)) 24px max(16px, env(safe-area-inset-top)); }

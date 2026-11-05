@@ -9,6 +9,7 @@ import { MoviEngine, moviSupported } from './movi'
 import { storyboardFrames, type Frames } from './storyboard'
 import { appleTouch, FrameGrabber, PICTURES_SHOWN } from './seekpreview'
 import { Chrome, variant } from './Chrome'
+import { sideways } from './sideways'
 import { OpeningLoader } from './loader'
 import { readChapters, type Chapter } from './chapters'
 import { applyDelay, look, placeCues, lookVars, setLook, setSubDelay } from './cues'
@@ -680,7 +681,7 @@ export function Player(props: {
 
     return (
         <video-player class="player-root">
-            <media-container ref={container} class="player" classList={{ blocked: blocked() }} attr:data-variant={variant()} tabIndex={-1}>
+            <media-container ref={container} class="player" classList={{ blocked: blocked(), sideways: sideways() }} attr:data-variant={variant()} tabIndex={-1}>
                 <video
                     ref={video}
                     playsinline

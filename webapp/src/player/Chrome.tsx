@@ -51,6 +51,7 @@ import { Choice, Entry, Panel, PhoneSheet, Picker, variant, walk } from './sheet
 import { nextShape, objectFit, pinchShape, ratioBox, ratioPath, shapeRatio, SHAPES, type Shape } from './shape'
 import { remoteKey } from '../tv/remote'
 import { standalone } from '../install'
+import { box, point, setSideways, setWanted, sideways, wanted } from './sideways'
 import { frameAt, type Frames } from './storyboard'
 import { cardLeft, cardSize, frameSlot, GIVE_UP_MS, PICTURES_SHOWN, type FrameGrabber } from './seekpreview'
 import { coverBackground } from '../screens/cover'
@@ -736,6 +737,27 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
             flash(upright ? t('player.rotation_landscape') : t('player.rotation_portrait'))
         } catch {}
     }
+    // Where the browser cannot lock the turn (an iPhone), the player turns itself (sideways.ts),
+    // so the phone's rotation lock can stay on. Only while the window is upright: a phone turned
+    // with its rotation lock off is left to the phone. Never an upright video. The choice is kept
+    // for the next video.
+    const [uprightWindow, setUprightWindow] = createSignal(innerHeight > innerWidth)
+    const [tallVideo, setTallVideo] = createSignal(false)
+    const onWindow = () => setUprightWindow(innerHeight > innerWidth)
+    window.addEventListener('resize', onWindow)
+    listen('loadedmetadata', () => setTallVideo(v.videoHeight > v.videoWidth))
+    listen('resize', () => setTallVideo(v.videoHeight > v.videoWidth))
+    const canFake = () => phone() && !canTurn() && uprightWindow() && !tallVideo()
+    createEffect(() => setSideways(canFake() && wanted()))
+    onCleanup(() => {
+        window.removeEventListener('resize', onWindow)
+        setSideways(false)
+    })
+    const turn = () => {
+        const on = !wanted()
+        setWanted(on)
+        flash(on ? t('player.rotation_landscape') : t('player.rotation_portrait'))
+    }
 
     const lock = () => {
         setSheet(null)
@@ -1025,8 +1047,9 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         return x < w * SIDE ? 'left' : x > w * (1 - SIDE) ? 'right' : 'centre'
     }
     const local = (e: PointerEvent) => {
-        const r = c.root.getBoundingClientRect()
-        return { x: e.clientX - r.left, y: e.clientY - r.top }
+        const r = box(c.root)
+        const p = point(e.clientX, e.clientY)
+        return { x: p.x - r.left, y: p.y - r.top }
     }
     const jump = (side: 'left' | 'right', x: number, y: number) => {
         seekBy(side === 'left' ? -10 : 10)
@@ -1405,6 +1428,9 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                                 <Btn icon={shapeIcon(shape())} label={plain() ? t('player.picture_shape_now', { shape: shapeName(shape()) }) : t('player.picture_shape_hint', { shape: shapeName(shape()) })} onClick={cycleShape} class="shape" />
                             </Show>
                             {/* Where the app has its rotate button: the app's player already fills the screen, a page does not. */}
+                            <Show when={canFake()}>
+                                <Btn icon={ScreenRotationIcon} label={t('player.screen_orientation')} onClick={turn} shot="turn" pressed={sideways()} />
+                            </Show>
                             <Show when={phone() && canFullscreen()}>
                                 <Btn
                                     icon={fullscreen() ? ArrowShrinkIcon : ArrowExpandIcon}
@@ -1556,6 +1582,9 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                         </Show>
                         <Show when={phone() && canTurn()}>
                             <Entry icon={ScreenRotationIcon} text={t('player.screen_orientation')} onClick={() => (setSheet(null), rotate())} />
+                        </Show>
+                        <Show when={canFake()}>
+                            <Entry icon={ScreenRotationIcon} text={t('player.screen_orientation')} onClick={() => (setSheet(null), turn())} />
                         </Show>
                         <Show when={!tv() && !(phone() && wideRow() && !canTurn())}>
                             <hr />
@@ -1791,12 +1820,15 @@ function SeekBar(props: {
     const [hoverX, setHoverX] = createSignal<number | null>(null)
     const [barWidth, setBarWidth] = createSignal(0)
     const fraction = (s: number) => (props.duration() ? Math.max(0, Math.min(1, s / props.duration())) : 0)
-    const timeAt = (clientX: number) => {
-        const r = bar.getBoundingClientRect()
+    // Positions in the player's own coordinates, which differ from the window's while it is turned (sideways.ts).
+    const xAt = (e: PointerEvent) => point(e.clientX, e.clientY).x
+    const yAt = (e: PointerEvent) => point(e.clientX, e.clientY).y
+    const timeAt = (x: number) => {
+        const r = box(bar)
         setBarWidth(r.width)
-        return Math.max(0, Math.min(1, (clientX - r.left) / r.width)) * props.duration()
+        return Math.max(0, Math.min(1, (x - r.left) / r.width)) * props.duration()
     }
-    const xOf = (clientX: number) => clientX - bar.getBoundingClientRect().left
+    const xOf = (x: number) => x - box(bar).left
     let dragging = false
     // A finger moving off the bar slows the drag to a half and a quarter (FineScrub): the bar's position is its own, not the finger's.
     let fine = { x: 0, last: 0, y: 0 }
@@ -1805,28 +1837,30 @@ function SeekBar(props: {
         if (!props.duration() || e.button > 0) return
         dragging = true
         bar.setPointerCapture(e.pointerId)
-        const r = bar.getBoundingClientRect()
-        fine = { x: e.clientX, last: e.clientX, y: r.top + r.height / 2 }
+        const r = box(bar)
+        const x = xAt(e)
+        fine = { x, last: x, y: r.top + r.height / 2 }
         setSlow(1)
-        props.setDragTime(timeAt(e.clientX))
-        if (e.pointerType === 'mouse') setHoverX(xOf(e.clientX))
+        props.setDragTime(timeAt(x))
+        if (e.pointerType === 'mouse') setHoverX(xOf(x))
         e.stopPropagation()
     }
     const move = (e: PointerEvent) => {
+        const x = xAt(e)
         if (dragging) {
-            if (e.pointerType === 'mouse') props.setDragTime(timeAt(e.clientX))
+            if (e.pointerType === 'mouse') props.setDragTime(timeAt(x))
             else {
-                const rate = fineRate(e.clientY - fine.y)
-                const r = bar.getBoundingClientRect()
-                fine.x = Math.max(r.left, Math.min(r.right, fine.x + (e.clientX - fine.last) * rate))
-                fine.last = e.clientX
+                const rate = fineRate(yAt(e) - fine.y)
+                const r = box(bar)
+                fine.x = Math.max(r.left, Math.min(r.right, fine.x + (x - fine.last) * rate))
+                fine.last = x
                 setSlow(rate)
                 props.setDragTime(timeAt(fine.x))
             }
         }
         if (e.pointerType === 'mouse') {
-            setBarWidth(bar.getBoundingClientRect().width)
-            setHoverX(xOf(e.clientX))
+            setBarWidth(box(bar).width)
+            setHoverX(xOf(x))
         }
     }
     const up = () => {

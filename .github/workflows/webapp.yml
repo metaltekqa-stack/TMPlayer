@@ -117,6 +117,24 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
+      # The same site for Cloudflare's own upload page (Workers & Pages, Upload assets), which
+      # refuses _routes.json: download the artifact cloudflare-upload and drop its zip there.
+      - name: Prepare for Cloudflare's upload page
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        run: |
+          cp -r webapp/dist webapp/cloudflare
+          rm -f webapp/cloudflare/_routes.json
+
+      - name: Upload the Cloudflare copy
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v7
+        with:
+          name: cloudflare-upload
+          path: webapp/cloudflare
+          include-hidden-files: true
+          retention-days: 14
+          if-no-files-found: error
+
       # This fork's own copy on Netlify (tmplayer-pwa.netlify.app). Netlify reads neither
       # Cloudflare's "! Header" lines nor _routes.json, and does not fall back to the page by
       # itself, so a copy of the site gets Netlify's own _headers and _redirects. The /tmdb poster
