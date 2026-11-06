@@ -50,7 +50,6 @@ import { t } from '../i18n'
 import { Choice, Entry, Panel, PhoneSheet, Picker, variant, walk } from './sheets'
 import { nextShape, objectFit, pinchShape, ratioBox, ratioPath, shapeRatio, SHAPES, type Shape } from './shape'
 import { remoteKey } from '../tv/remote'
-import { standalone } from '../install'
 import { box, point, setSideways, setWanted, sideways, wanted } from './sideways'
 import { frameAt, type Frames } from './storyboard'
 import { cardLeft, cardSize, frameSlot, GIVE_UP_MS, PICTURES_SHOWN, type FrameGrabber } from './seekpreview'
@@ -696,12 +695,11 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     // (none for movi's canvas, which takes the iPhone's away). The app's player always fills the
     // screen and opens sideways (ScreenOrientation.DEFAULT), so on a phone the row's button does both:
     // full screen, then the turn locked sideways for a wide video, where the browser can lock it.
-    // Opened from an iPhone's Home Screen, the app keeps its own player: the watch page already
-    // fills the screen there, and iOS's player would draw the subtitles in the phone's caption style
-    // (a black box) instead of the look's, without the app's controls. In a Safari tab, iOS's player
-    // is still the only way past Safari's bars.
+    // On an iPhone the button hands the video to iOS's own player, which draws the subtitles in the
+    // phone's caption style and its own controls. The app's own landscape, with its controls and
+    // the look's subtitles, is the rotate button beside it (sideways.ts).
     type WebkitFull = HTMLVideoElement & { webkitEnterFullscreen?: () => void }
-    const iosFullscreen = () => !standalone && typeof (v as WebkitFull).webkitEnterFullscreen === 'function'
+    const iosFullscreen = () => typeof (v as WebkitFull).webkitEnterFullscreen === 'function'
     const canFullscreen = () => !!document.fullscreenEnabled || iosFullscreen()
     const orientation = (screen as Screen & { orientation?: ScreenOrientation & { lock?: (o: string) => Promise<void>; unlock?: () => void } }).orientation
     const canTurn = () => !!orientation?.lock && !!document.fullscreenEnabled
@@ -722,8 +720,6 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
             if (phone() && canTurn() && v.videoWidth > v.videoHeight) await orientation!.lock!('landscape').catch(() => {})
             return
         }
-        // The double click and the F key end here too: no handing over to iOS's player where it is off.
-        if (!iosFullscreen()) return
         try {
             ;(v as WebkitFull).webkitEnterFullscreen?.()
         } catch {}
